@@ -18,6 +18,7 @@
 #import "UTMRenderer.h"
 #import "UTMVirtualMachine.h"
 #import "VMKeyboardView.h"
+#import "VMSoftKeyboardView.h"
 #import "CSInput.h"
 #import "UTMQemuManager.h"
 #import "VMConfigExistingViewController.h"
@@ -120,6 +121,9 @@
     // Feedback generator for clicks
     self.clickFeedbackGenerator = [[UISelectionFeedbackGenerator alloc] init];
     self.resizeFeedbackGenerator = [[UIImpactFeedbackGenerator alloc] init];
+    
+    // Start with hard keyboard
+    [self toggleSoftKeyboard:NO];;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -127,6 +131,7 @@
     [self.navigationController setNavigationBarHidden:YES animated:animated];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillChangeFrame:) name:UIKeyboardWillChangeFrameNotification object:nil];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -134,6 +139,7 @@
     [self.navigationController setNavigationBarHidden:NO animated:animated];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIKeyboardWillShowNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIKeyboardWillHideNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIKeyboardWillChangeFrameNotification object:nil];
 }
 
 - (void)virtualMachine:(UTMVirtualMachine *)vm transitionToState:(UTMVMState)state {
@@ -324,16 +330,16 @@ static CGFloat CGPointToPixel(CGFloat point) {
     if (sender.state == UIGestureRecognizerStateEnded) {
         if (!self.toolbarAccessoryView.hidden) {
             [self hideToolbar];
-        } else if (!self.keyboardView.isFirstResponder) {
-            [self.keyboardView becomeFirstResponder];
+        } else if (!self.softKeyboardView.isFirstResponder) {
+            [self toggleSoftKeyboard:YES];
         }
     }
 }
 
 - (IBAction)gestureSwipeDown:(UISwipeGestureRecognizer *)sender {
     if (sender.state == UIGestureRecognizerStateEnded) {
-        if (self.keyboardView.isFirstResponder) {
-            [self.keyboardView resignFirstResponder];
+        if (self.softKeyboardView.isFirstResponder) {
+            [self toggleSoftKeyboard:NO];
         } else if (self.toolbarAccessoryView.hidden) {
             [self showToolbar];
         }
@@ -382,6 +388,7 @@ static CGFloat CGPointToPixel(CGFloat point) {
 #pragma mark - Keyboard
 
 - (void)keyboardWillShow:(NSNotification *)notification {
+#if 0 // disabled keyboard push view up
     CGSize keyboardSize = [[[notification userInfo] objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
     _keyboardViewHeight = keyboardSize.height;
     
@@ -390,15 +397,36 @@ static CGFloat CGPointToPixel(CGFloat point) {
         f.origin.y = -self->_keyboardViewHeight;
         self.mtkView.frame = f;
     }];
+#endif
+    [self updateKeyboardAccessoryFrame];
 }
 
 - (void)keyboardWillHide:(NSNotification *)notification {
+#if 0 // disabled keyboard push view up
+    if (self.softKeyboardView.isFirstResponder) {
+        return; // ignore for hardware keyboard
+    }
     [UIView animateWithDuration:0.3 animations:^{
         CGRect f = self.mtkView.frame;
         f.origin.y = 0.0f;
         self->_keyboardViewHeight = 0;
         self.mtkView.frame = f;
     }];
+#endif
+}
+
+- (void)keyboardWillChangeFrame:(NSNotification *)notification {
+    [self updateKeyboardAccessoryFrame];
+}
+
+- (void)updateKeyboardAccessoryFrame {
+    if (self.softKeyboardView.isFirstResponder) {
+        if (self.inputAccessoryView.safeAreaInsets.bottom > 0) {
+            self.softKeyboardView.softKeyboardVisible = YES;
+        } else {
+            self.softKeyboardView.softKeyboardVisible = NO;
+        }
+    }
 }
 
 - (void)keyboardView:(nonnull VMKeyboardView *)keyboardView didPressKeyDown:(int)scancode {
@@ -410,8 +438,29 @@ static CGFloat CGPointToPixel(CGFloat point) {
     [self resetModifierToggles];
 }
 
+- (void)toggleSoftKeyboard:(BOOL)visible {
+    if (visible) {
+        [self.softKeyboardView becomeFirstResponder];
+    } else {
+        [self.hardKeyboardView becomeFirstResponder];
+    }
+}
+
 - (IBAction)keyboardDonePressed:(UIButton *)sender {
-    [self.keyboardView resignFirstResponder];
+    [self toggleSoftKeyboard:NO];
+}
+
+- (void)keyboardPastePressed:(UIButton *)sender {
+    UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+    NSString *string = pasteboard.string;
+    if (string) {
+        NSLog(@"Pasting: %@", string);
+        [string enumerateSubstringsInRange:NSMakeRange(0, string.length) options:NSStringEnumerationByComposedCharacterSequences usingBlock:^(NSString * _Nullable substring, NSRange substringRange, NSRange enclosingRange, BOOL * _Nonnull stop) {
+            [self.softKeyboardView insertText:substring];
+        }];
+    } else {
+        NSLog(@"No string to paste.");
+    }
 }
 
 #pragma mark - Toolbar actions
@@ -478,10 +527,10 @@ static CGFloat CGPointToPixel(CGFloat point) {
 }
 
 - (IBAction)showKeyboardButton:(UIButton *)sender {
-    if (self.keyboardView.isFirstResponder) {
-        [self.keyboardView resignFirstResponder];
+    if (self.softKeyboardView.isFirstResponder) {
+        [self toggleSoftKeyboard:NO];
     } else {
-        [self.keyboardView becomeFirstResponder];
+        [self toggleSoftKeyboard:YES];
     }
 }
 

@@ -294,7 +294,41 @@ static int indexForExtChar(const ext_key_mapping_t *table, size_t table_len, cha
     size_t _ext_map_len;
 }
 
-@synthesize delegate;
+- (UIKeyboardType)keyboardType {
+    return UIKeyboardTypeASCIICapable;
+}
+
+- (UITextAutocapitalizationType)autocapitalizationType {
+    return UITextAutocapitalizationTypeNone;
+}
+
+- (UITextAutocorrectionType)autocorrectionType {
+    return UITextAutocorrectionTypeNo;
+}
+
+- (UITextSpellCheckingType)spellCheckingType {
+    return UITextSpellCheckingTypeNo;
+}
+
+- (UITextSmartQuotesType)smartQuotesType {
+    return UITextSmartQuotesTypeNo;
+}
+
+- (UITextSmartDashesType)smartDashesType {
+    return UITextSmartDashesTypeNo;
+}
+
+- (UITextSmartInsertDeleteType)smartInsertDeleteType {
+    return UITextSmartInsertDeleteTypeNo;
+}
+
+- (UIView *)inputView {
+    return [[UIView alloc] initWithFrame:CGRectZero];
+}
+
+- (UIView *)inputAccessoryView {
+    return nil;
+}
 
 - (void)configureTables {
     NSString *language = [[NSLocale preferredLanguages] objectAtIndex:0];
@@ -310,16 +344,6 @@ static int indexForExtChar(const ext_key_mapping_t *table, size_t table_len, cha
         _ext_map = pc104_us_ext;
         _ext_map_len = sizeof(pc104_us_ext)/sizeof(pc104_us_ext[0]);
     }
-}
-
-- (id)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        [self setAutocapitalizationType:UITextAutocapitalizationTypeNone];
-        [self setAutocorrectionType:UITextAutocorrectionTypeNo];
-        [self setKeyboardType:UIKeyboardTypeASCIICapable];
-    }
-    return self;
 }
 
 - (BOOL)hasText {
@@ -421,18 +445,6 @@ static int indexForExtChar(const ext_key_mapping_t *table, size_t table_len, cha
 
 - (BOOL)canBecomeFirstResponder {
     return YES;
-}
-
-- (UITextSmartDashesType)smartDashesType {
-    return UITextSmartDashesTypeNo;
-}
-
-- (UITextSmartQuotesType)smartQuotesType {
-    return UITextSmartQuotesTypeNo;
-}
-
-- (UITextSmartInsertDeleteType)smartInsertDeleteType {
-    return UITextSmartInsertDeleteTypeNo;
 }
 
 @end
