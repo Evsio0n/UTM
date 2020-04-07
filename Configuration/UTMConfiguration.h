@@ -18,29 +18,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface UTMConfiguration : NSObject
+@interface UTMConfiguration : NSObject<NSCopying>
 
 @property (nonatomic, weak, readonly) NSDictionary *dictRepresentation;
 
-+ (NSArray<NSString *>*)supportedArchitecturesPretty;
-+ (NSArray<NSString *>*)supportedArchitectures;
-+ (NSArray<NSString *>*)supportedBootDevicesPretty;
-+ (NSArray<NSString *>*)supportedBootDevices;
-+ (NSArray<NSString *>*)supportedTargetsForArchitecture:(NSString *)architecture;
-+ (NSArray<NSString *>*)supportedResolutions;
-+ (NSArray<NSString *>*)supportedDriveInterfaces;
-+ (NSString *)diskImagesDirectory;
-+ (NSString *)defaultDriveInterface;
-
-@property (nonatomic, nullable, copy) NSString *name;
+@property (nonatomic, copy) NSString *name;
 @property (nonatomic, nullable, copy) NSURL *existingPath;
-
-@property (nonatomic, nullable, copy) NSString *systemArchitecture;
-@property (nonatomic, nullable, copy) NSNumber *systemMemory;
-@property (nonatomic, nullable, copy) NSNumber *systemCPUCount;
-@property (nonatomic, nullable, copy) NSString *systemTarget;
-@property (nonatomic, nullable, copy) NSString *systemBootDevice;
-@property (nonatomic, nullable, copy) NSString *systemAddArgs;
 
 @property (nonatomic, assign) BOOL displayConsoleOnly;
 @property (nonatomic, assign) BOOL displayFixedResolution;
@@ -49,32 +32,22 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) BOOL displayZoomScale;
 @property (nonatomic, assign) BOOL displayZoomLetterBox;
 
-@property (nonatomic, assign) BOOL inputTouchscreenMode;
-@property (nonatomic, assign) BOOL inputDirect;
-
-@property (nonatomic, assign) BOOL networkEnabled;
-@property (nonatomic, assign) BOOL networkLocalhostOnly;
-@property (nonatomic, nullable, copy) NSString *networkIPSubnet;
-@property (nonatomic, nullable, copy) NSString *networkDHCPStart;
+@property (nonatomic, assign) BOOL inputLegacy;
 
 @property (nonatomic, assign) BOOL printEnabled;
 
 @property (nonatomic, assign) BOOL soundEnabled;
+@property (nonatomic, nullable, copy) NSString *soundCard;
 
 @property (nonatomic, assign) BOOL sharingClipboardEnabled;
 
+@property (nonatomic, assign) BOOL debugLogEnabled;
+
+- (void)migrateConfigurationIfNecessary;
 - (id)initDefaults:(NSString *)name;
 - (id)initWithDictionary:(NSMutableDictionary *)dictionary name:(NSString *)name path:(NSURL *)path;
-- (NSUInteger)countDrives;
-- (NSUInteger)newDrive:(NSString *)name interface:(NSString *)interface isCdrom:(BOOL)isCdrom;
-- (nullable NSString *)driveImagePathForIndex:(NSUInteger)index;
-- (void)setImagePath:(NSString *)path forIndex:(NSUInteger)index;
-- (nullable NSString *)driveInterfaceTypeForIndex:(NSUInteger)index;
-- (void)setDriveInterfaceType:(NSString *)interfaceType forIndex:(NSUInteger)index;
-- (BOOL)driveIsCdromForIndex:(NSUInteger)index;
-- (void)setDriveIsCdrom:(BOOL)isCdrom forIndex:(NSUInteger)index;
-- (void)moveDriveIndex:(NSUInteger)index to:(NSUInteger)newIndex;
-- (void)removeDriveAtIndex:(NSUInteger)index;
+
+- (NSURL*)terminalInputOutputURL;
 
 @end
 

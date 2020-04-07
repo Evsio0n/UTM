@@ -16,6 +16,8 @@ typedef enum UTMVertexInputIndex
 {
     UTMVertexInputIndexVertices     = 0,
     UTMVertexInputIndexViewportSize = 1,
+    UTMVertexInputIndexTransform    = 2,
+    UTMVertexInputIndexHasAlpha     = 3,
 } UTMVertexInputIndex;
 
 // Texture index values shared between shader and C code to ensure Metal shader buffer inputs match

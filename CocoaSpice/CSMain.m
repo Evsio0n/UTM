@@ -20,6 +20,12 @@
 #import <pthread.h>
 #import "gst_ios_init.h"
 
+@interface CSMain ()
+
+@property (nonatomic, readwrite) BOOL running;
+
+@end
+
 @implementation CSMain {
     GMainContext *_main_context;
     GMainLoop *_main_loop;
@@ -50,7 +56,7 @@ static void logHandler(const gchar *log_domain, GLogLevelFlags log_level,
     now = g_date_time_new_now_local();
     dateTimeStr = g_date_time_format(now, "%Y-%m-%d %T");
     
-    fprintf(stderr, "%s,%03d %s %s-%s\n", dateTimeStr,
+    fprintf(stdout, "%s,%03d %s %s-%s\n", dateTimeStr,
             g_date_time_get_microsecond(now) / 1000, levelStr,
             log_domain, message);
     
@@ -100,7 +106,7 @@ void *spice_main_loop(void *args) {
 
 - (void)spiceSetDebug:(BOOL)enabled {
     spice_util_set_debug(enabled);
-    g_log_set_default_handler(logHandler, NULL);
+    g_log_set_handler(NULL, G_LOG_LEVEL_MASK, logHandler, NULL);
 }
 
 - (BOOL)spiceStart {
@@ -108,7 +114,7 @@ void *spice_main_loop(void *args) {
         if (pthread_create(&_spice_thread, NULL, &spice_main_loop, (__bridge_retained void *)self) != 0) {
             return NO;
         }
-        _running = YES;
+        self.running = YES;
     }
     return YES;
 }
@@ -118,7 +124,7 @@ void *spice_main_loop(void *args) {
         void *status;
         g_main_loop_quit(_main_loop);
         pthread_join(_spice_thread, &status);
-        _running = NO;
+        self.running = NO;
     }
 }
 

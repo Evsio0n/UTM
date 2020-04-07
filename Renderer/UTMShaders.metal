@@ -26,22 +26,29 @@ typedef struct
     //   pass that interpolated value to the fragment shader for each fragment in that triangle;
     float2 textureCoordinate;
 
+    // If no, then we fake an alpha value
+    bool hasAlpha;
 } RasterizerData;
 
 // Vertex Function
 vertex RasterizerData
 vertexShader(uint vertexID [[ vertex_id ]],
              constant UTMVertex *vertexArray [[ buffer(UTMVertexInputIndexVertices) ]],
-             constant vector_uint2 *viewportSizePointer  [[ buffer(UTMVertexInputIndexViewportSize) ]])
+             constant vector_uint2 *viewportSizePointer  [[ buffer(UTMVertexInputIndexViewportSize) ]],
+             constant matrix_float4x4 &transformation [[ buffer(UTMVertexInputIndexTransform) ]],
+             constant bool *hasAlpha [[ buffer(UTMVertexInputIndexHasAlpha) ]])
 
 {
 
     RasterizerData out;
+    
+    // Transform the vertex
+    vector_float4 position = transformation * float4(vertexArray[vertexID].position,0,1);
 
     // Index into our array of positions to get the current vertex
     //   Our positions are specified in pixel dimensions (i.e. a value of 100 is 100 pixels from
     //   the origin)
-    float2 pixelSpacePosition = vertexArray[vertexID].position.xy;
+    float2 pixelSpacePosition = position.xy;
 
     // Get the size of the drawable so that we can convert to normalized device coordinates,
     float2 viewportSize = float2(*viewportSizePointer);
@@ -68,6 +75,9 @@ vertexShader(uint vertexID [[ vertex_id ]],
     //   triangle.
     out.textureCoordinate = vertexArray[vertexID].textureCoordinate;
     
+    // All fragments have alpha or not
+    out.hasAlpha = *hasAlpha;
+
     return out;
 }
 
@@ -80,7 +90,12 @@ samplingShader(RasterizerData in [[stage_in]],
                                       min_filter::linear);
 
     // Sample the texture to obtain a color
-    const half4 colorSample = colorTexture.sample(textureSampler, in.textureCoordinate);
+    half4 colorSample = colorTexture.sample(textureSampler, in.textureCoordinate);
+
+    // fake alpha
+    if (!in.hasAlpha) {
+        colorSample.a = 0xff;
+    }
 
     // We return the color of the texture inverted
     return float4(colorSample);

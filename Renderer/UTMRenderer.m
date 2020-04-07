@@ -30,9 +30,14 @@ Implementation of renderer class which performs Metal setup and per frame render
     vector_uint2 _viewportSize;
 }
 
-- (void)setSource:(id<UTMRenderSource>)source {
+- (void)setSourceScreen:(id<UTMRenderSource>)source {
     source.device = _device;
-    _source = source;
+    _sourceScreen = source;
+}
+
+- (void)setSourceCursor:(id<UTMRenderSource>)source {
+    source.device = _device;
+    _sourceCursor = source;
 }
 
 /// Initialize with the MetalKit view from which we'll obtain our Metal device
@@ -60,6 +65,13 @@ Implementation of renderer class which performs Metal setup and per frame render
         pipelineStateDescriptor.vertexFunction = vertexFunction;
         pipelineStateDescriptor.fragmentFunction = fragmentFunction;
         pipelineStateDescriptor.colorAttachments[0].pixelFormat = mtkView.colorPixelFormat;
+        pipelineStateDescriptor.colorAttachments[0].blendingEnabled = YES;
+        pipelineStateDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+        pipelineStateDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+        pipelineStateDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+        pipelineStateDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+        pipelineStateDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+        pipelineStateDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
         pipelineStateDescriptor.depthAttachmentPixelFormat = mtkView.depthStencilPixelFormat;
 
         NSError *error = NULL;
@@ -76,10 +88,6 @@ Implementation of renderer class which performs Metal setup and per frame render
 
         // Create the command queue
         _commandQueue = [_device newCommandQueue];
-        
-        // Setup viewport
-        self.viewportScale = 1.0f;
-        self.viewportOrigin = CGPointMake(0, 0);
     }
 
     return self;
@@ -94,9 +102,45 @@ Implementation of renderer class which performs Metal setup and per frame render
     _viewportSize.y = size.height;
 }
 
+/// Create a translation+scale matrix
+static matrix_float4x4 matrix_scale_translate(CGFloat scale, CGPoint translate)
+{
+    matrix_float4x4 m = {
+        .columns[0] = {
+            scale,
+            0,
+            0,
+            0
+        },
+        .columns[1] = {
+            0,
+            scale,
+            0,
+            0
+        },
+        .columns[2] = {
+            0,
+            0,
+            1,
+            0
+        },
+        .columns[3] = {
+            translate.x,
+            -translate.y, // y flipped
+            0,
+            1
+        }
+        
+    };
+    return m;
+}
+
 /// Called whenever the view needs to render a frame
 - (void)drawInMTKView:(nonnull MTKView *)view
 {
+    if (view.hidden) {
+        return;
+    }
 
     // Create a new command buffer for each render pass to the current drawable
     id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
@@ -105,52 +149,89 @@ Implementation of renderer class which performs Metal setup and per frame render
     // Obtain a renderPassDescriptor generated from the view's drawable textures
     MTLRenderPassDescriptor *renderPassDescriptor = view.currentRenderPassDescriptor;
 
-    if(renderPassDescriptor != nil && self.source != nil)
+    if(renderPassDescriptor != nil)
     {
+        __weak dispatch_semaphore_t screenLock = nil;
+        __weak dispatch_semaphore_t cursorLock = nil;
+
         // Create a render command encoder so we can render into something
         id<MTLRenderCommandEncoder> renderEncoder =
         [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
         renderEncoder.label = @"MyRenderEncoder";
+        
+        if (self.sourceScreen && self.sourceScreen.visible) {
+            // Lock screen updates
+            bool hasAlpha = NO;
+            screenLock = self.sourceScreen.drawLock;
+            dispatch_semaphore_wait(screenLock, DISPATCH_TIME_FOREVER);
+            
+            // Render the screen first
+            
+            matrix_float4x4 transform = matrix_scale_translate(self.sourceScreen.viewportScale,
+                                                               self.sourceScreen.viewportOrigin);
 
-        // Set the region of the drawable to which we'll draw.
-        CGSize scaled = CGSizeMake(_viewportSize.x * self.viewportScale, _viewportSize.y * self.viewportScale);
-        MTLViewport viewport = {
-            self.viewportOrigin.x + -scaled.width /2 + _viewportSize.x/2,
-            self.viewportOrigin.y + -scaled.height/2 + _viewportSize.y/2,
-            scaled.width,
-            scaled.height,
-            -1.0,
-            1.0
-        };
-        [renderEncoder setViewport:viewport];
+            [renderEncoder setRenderPipelineState:_pipelineState];
 
-        [renderEncoder setRenderPipelineState:_pipelineState];
+            [renderEncoder setVertexBuffer:self.sourceScreen.vertices
+                                    offset:0
+                                  atIndex:UTMVertexInputIndexVertices];
 
-        [renderEncoder setVertexBuffer:self.source.vertices
-                                offset:0
-                              atIndex:UTMVertexInputIndexVertices];
+            [renderEncoder setVertexBytes:&_viewportSize
+                                   length:sizeof(_viewportSize)
+                                  atIndex:UTMVertexInputIndexViewportSize];
 
-        [renderEncoder setVertexBytes:&_viewportSize
-                               length:sizeof(_viewportSize)
-                              atIndex:UTMVertexInputIndexViewportSize];
+            [renderEncoder setVertexBytes:&transform
+                                   length:sizeof(transform)
+                                  atIndex:UTMVertexInputIndexTransform];
 
-        // Set the texture object.  The UTMTextureIndexBaseColor enum value corresponds
-        ///  to the 'colorMap' argument in our 'samplingShader' function because its
-        //   texture attribute qualifier also uses UTMTextureIndexBaseColor for its index
-        [renderEncoder setFragmentTexture:self.source.texture
-                                  atIndex:UTMTextureIndexBaseColor];
+            [renderEncoder setVertexBytes:&hasAlpha
+                                   length:sizeof(hasAlpha)
+                                  atIndex:UTMVertexInputIndexHasAlpha];
 
-        // Draw the vertices of our triangles
-        [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle
-                          vertexStart:0
-                          vertexCount:self.source.numVertices];
+            // Set the texture object.  The UTMTextureIndexBaseColor enum value corresponds
+            ///  to the 'colorMap' argument in our 'samplingShader' function because its
+            //   texture attribute qualifier also uses UTMTextureIndexBaseColor for its index
+            [renderEncoder setFragmentTexture:self.sourceScreen.texture
+                                      atIndex:UTMTextureIndexBaseColor];
+
+            // Draw the vertices of our triangles
+            [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle
+                              vertexStart:0
+                              vertexCount:self.sourceScreen.numVertices];
+        }
+
+        if (self.sourceCursor && self.sourceCursor.visible) {
+            // Lock cursor updates
+            bool hasAlpha = YES;
+            cursorLock = self.sourceCursor.drawLock;
+            dispatch_semaphore_wait(cursorLock, DISPATCH_TIME_FOREVER);
+
+            // Next render the cursor
+            matrix_float4x4 transform = matrix_scale_translate(self.sourceScreen.viewportScale,
+                                                               CGPointMake(self.sourceScreen.viewportOrigin.x +
+                                                                           self.sourceCursor.viewportOrigin.x,
+                                                                           self.sourceScreen.viewportOrigin.y +
+                                                                           self.sourceCursor.viewportOrigin.y));
+            [renderEncoder setVertexBuffer:self.sourceCursor.vertices
+                                    offset:0
+                                  atIndex:UTMVertexInputIndexVertices];
+            [renderEncoder setVertexBytes:&_viewportSize
+                                   length:sizeof(_viewportSize)
+                                  atIndex:UTMVertexInputIndexViewportSize];
+            [renderEncoder setVertexBytes:&transform
+                                 length:sizeof(transform)
+                                atIndex:UTMVertexInputIndexTransform];
+            [renderEncoder setVertexBytes:&hasAlpha
+                                 length:sizeof(hasAlpha)
+                                atIndex:UTMVertexInputIndexHasAlpha];
+            [renderEncoder setFragmentTexture:self.sourceCursor.texture
+                                      atIndex:UTMTextureIndexBaseColor];
+            [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle
+                              vertexStart:0
+                              vertexCount:self.sourceCursor.numVertices];
+        }
 
         [renderEncoder endEncoding];
-        
-        __weak dispatch_semaphore_t semaphore = self.source.drawLock;
-        
-        // Wait for any texture updates to be done
-        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 
         // Schedule a present once the framebuffer is complete using the current drawable
         [commandBuffer presentDrawable:view.currentDrawable];
@@ -159,7 +240,12 @@ Implementation of renderer class which performs Metal setup and per frame render
         [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> commandBuffer) {
             // GPU work is complete
             // Signal the semaphore to start the CPU work
-            dispatch_semaphore_signal(semaphore);
+            if (screenLock) {
+                dispatch_semaphore_signal(screenLock);
+            }
+            if (cursorLock) {
+                dispatch_semaphore_signal(cursorLock);
+            }
         }];
     }
 

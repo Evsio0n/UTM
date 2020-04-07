@@ -14,15 +14,12 @@
 // limitations under the License.
 //
 
-#import "VMKeyboardView.h"
+#import "VMConfigSwitch.h"
 
-NS_ASSUME_NONNULL_BEGIN
+@implementation VMConfigSwitch
 
-@interface VMSoftKeyboardView : VMKeyboardView
-
-@property (nonatomic, readwrite, strong) IBOutlet UIView *inputAccessoryView;
-@property (nonatomic, assign) BOOL softKeyboardVisible;
+- (void)valueChanged:(id)value {
+    self.on = [value boolValue];
+}
 
 @end
-
-NS_ASSUME_NONNULL_END

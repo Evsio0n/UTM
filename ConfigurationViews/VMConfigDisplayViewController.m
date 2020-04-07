@@ -16,6 +16,7 @@
 
 #import "VMConfigDisplayViewController.h"
 #import "UTMConfiguration.h"
+#import "UTMConfiguration+Constants.h"
 
 @interface VMConfigDisplayViewController ()
 
@@ -27,6 +28,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // FIXME: remove this warning
+    [self showUnimplementedAlert];
 }
 
 - (void)refreshViewFromConfiguration {
@@ -75,8 +78,8 @@
 
 - (void)setMaxResolution:(NSString *)maxResolution {
     NSArray<NSString *> *parts = [maxResolution componentsSeparatedByString:@"x"];
-    self.configuration.displayFixedResolutionWidth = [NSNumber numberWithLong:[parts[0] integerValue]];
-    self.configuration.displayFixedResolutionHeight = [NSNumber numberWithLong:[parts[1] integerValue]];
+    self.configuration.displayFixedResolutionWidth = @([parts[0] integerValue]);
+    self.configuration.displayFixedResolutionHeight = @([parts[1] integerValue]);
 }
 
 - (NSString *)maxResolution {

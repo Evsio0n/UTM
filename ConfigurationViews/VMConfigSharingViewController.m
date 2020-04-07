@@ -23,20 +23,4 @@
 
 @implementation VMConfigSharingViewController
 
-- (void)viewDidLoad {
-    [super viewDidLoad];
-}
-
-- (void)refreshViewFromConfiguration {
-    [super refreshViewFromConfiguration];
-    self.clipboardSharingEnabledSwitch.on = self.configuration.sharingClipboardEnabled;
-}
-
-#pragma mark - Event handlers
-
-- (IBAction)clipboardSharingEnabledSwitchChanged:(UISwitch *)sender {
-    NSAssert(sender == self.clipboardSharingEnabledSwitch, @"Invalid sender");
-    self.configuration.sharingClipboardEnabled = sender.on;
-}
-
 @end

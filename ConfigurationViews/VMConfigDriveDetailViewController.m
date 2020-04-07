@@ -16,6 +16,7 @@
 
 #import "VMConfigDriveDetailViewController.h"
 #import "UTMConfiguration.h"
+#import "UTMConfiguration+Constants.h"
 #import "VMConfigDrivePickerViewController.h"
 
 @interface VMConfigDriveDetailViewController ()
@@ -35,17 +36,39 @@
 
 - (void)refreshViewFromConfiguration {
     [super refreshViewFromConfiguration];
+    self.imageTypePickerActive = NO;
     self.driveLocationPickerActive = NO;
     if (self.valid) {
         self.existingPathLabel.text = [self.configuration driveImagePathForIndex:self.driveIndex];
-        self.isCdromSwitch.on = [self.configuration driveIsCdromForIndex:self.driveIndex];
+        self.imageType = [self.configuration driveImageTypeForIndex:self.driveIndex];
         self.driveInterfaceType = [self.configuration driveInterfaceTypeForIndex:self.driveIndex];
     } else {
+        self.imageType = UTMDiskImageTypeDisk;
         self.driveInterfaceType = [UTMConfiguration defaultDriveInterface];
     }
 }
 
 #pragma mark - Properties
+
+- (void)setImageTypePickerActive:(BOOL)imageTypePickerActive  {
+    _imageTypePickerActive = imageTypePickerActive;
+    [self pickerCell:self.imageTypePickerCell setActive:imageTypePickerActive];
+}
+
+- (void)setImageType:(UTMDiskImageType)imageType {
+    NSAssert(imageType < UTMDiskImageTypeMax, @"Invalid image type %lu", imageType);
+    _imageType = imageType;
+    if (self.valid) {
+        [self.configuration setDriveImageType:imageType forIndex:self.driveIndex];
+    }
+    self.imageTypeLabel.text = [UTMConfiguration supportedImageTypes][imageType];
+    if (imageType == UTMDiskImageTypeDisk || imageType == UTMDiskImageTypeCD) {
+        [self pickerCell:self.driveLocationCell setActive:YES];
+    } else {
+        [self pickerCell:self.driveLocationCell setActive:NO];
+        self.driveLocationPickerActive = NO;
+    }
+}
 
 - (void)setDriveLocationPickerActive:(BOOL)driveLocationPickerActive {
     _driveLocationPickerActive = driveLocationPickerActive;
@@ -66,6 +89,9 @@
     if ([tableView cellForRowAtIndexPath:indexPath] == self.driveLocationCell) {
         self.driveLocationPickerActive = !self.driveLocationPickerActive;
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    } else if ([tableView cellForRowAtIndexPath:indexPath] == self.imageTypeCell) {
+        self.imageTypePickerActive = !self.imageTypePickerActive;
+        [tableView deselectRowAtIndexPath:indexPath animated:YES];
     }
 }
 
@@ -73,6 +99,8 @@
 
 - (NSInteger)numberOfComponentsInPickerView:(nonnull UIPickerView *)pickerView {
     if (pickerView == self.driveLocationPicker) {
+        return 1;
+    } else if (pickerView == self.imageTypePicker) {
         return 1;
     } else {
         NSAssert(0, @"Invalid picker");
@@ -84,6 +112,8 @@
     NSAssert(component == 0, @"Invalid component");
     if (pickerView == self.driveLocationPicker) {
         return [UTMConfiguration supportedDriveInterfaces].count;
+    } else if (pickerView == self.imageTypePicker) {
+        return [UTMConfiguration supportedImageTypes].count;
     } else {
         NSAssert(0, @"Invalid picker");
     }
@@ -94,6 +124,8 @@
     NSAssert(component == 0, @"Invalid component");
     if (pickerView == self.driveLocationPicker) {
         return [UTMConfiguration supportedDriveInterfaces][row];
+    } else if (pickerView == self.imageTypePicker) {
+        return [UTMConfiguration supportedImageTypesPretty][row];
     } else {
         NSAssert(0, @"Invalid picker");
     }
@@ -104,6 +136,8 @@
     NSAssert(component == 0, @"Invalid component");
     if (pickerView == self.driveLocationPicker) {
         self.driveInterfaceType = [UTMConfiguration supportedDriveInterfaces][row];
+    } else if (pickerView == self.imageTypePicker) {
+        self.imageType = row;
     } else {
         NSAssert(0, @"Invalid picker");
     }
@@ -125,18 +159,9 @@
     VMConfigDrivePickerViewController *source = (VMConfigDrivePickerViewController *)sender.sourceViewController;
     if (!self.valid) {
         self.valid = YES;
-        self.driveIndex = [self.configuration newDrive:source.selectedName interface:self.driveInterfaceType isCdrom:self.isCdromSwitch.on];
+        self.driveIndex = [self.configuration newDrive:source.selectedName type:self.imageType interface:self.driveInterfaceType];
     } else {
         [self.configuration setImagePath:source.selectedName forIndex:self.driveIndex];
-    }
-}
-
-#pragma mark - Event handlers
-
-- (IBAction)isCdromSwitchChanged:(UISwitch *)sender {
-    NSAssert(sender == self.isCdromSwitch, @"Invalid sender");
-    if (self.valid) {
-        [self.configuration setDriveIsCdrom:sender.on forIndex:self.driveIndex];
     }
 }
 

@@ -15,6 +15,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#import "UTMRenderSource.h"
 @import CoreGraphics;
 
 typedef struct _SpiceSession SpiceSession;
@@ -39,7 +40,7 @@ typedef NS_ENUM(NSUInteger, SendScrollType) {
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface CSInput : NSObject
+@interface CSInput : NSObject <UTMRenderSource>
 
 @property (nonatomic, readonly, nullable) SpiceSession *session;
 @property (nonatomic, readonly, assign) NSInteger channelID;
@@ -47,6 +48,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, assign) BOOL serverModeCursor;
 @property (nonatomic, readonly, assign) BOOL hasCursor;
 @property (nonatomic, assign) BOOL disableInputs;
+@property (nonatomic, readonly) CGSize cursorSize;
+@property (nonatomic, assign) CGSize displaySize;
+@property (nonatomic, assign) BOOL inhibitCursor;
 
 - (void)sendKey:(SendKeyType)type code:(int)scancode;
 - (void)sendPause:(SendKeyType)type;
@@ -56,6 +60,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)sendMouseScroll:(SendScrollType)type button:(SendButtonType)button dy:(CGFloat)dy;
 - (void)sendMouseButton:(SendButtonType)button pressed:(BOOL)pressed point:(CGPoint)point;
 - (void)requestMouseMode:(BOOL)server;
+- (void)forceCursorPosition:(CGPoint)pos;
 
 - (id)initWithSession:(nonnull SpiceSession *)session channelID:(NSInteger)channelID monitorID:(NSInteger)monitorID;
 

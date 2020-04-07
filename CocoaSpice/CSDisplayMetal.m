@@ -27,6 +27,14 @@
                 (int)display.monitorID, \
                 ## __VA_ARGS__)
 
+@interface CSDisplayMetal ()
+
+@property (nonatomic, readwrite, nullable) SpiceSession *session;
+@property (nonatomic, readwrite, assign) NSInteger channelID;
+@property (nonatomic, readwrite, assign) NSInteger monitorID;
+
+@end
+
 @implementation CSDisplayMetal {
     SpiceDisplayChannel     *_display;
     
@@ -140,6 +148,7 @@ static void cs_update_monitor_area(SpiceChannel *channel, GParamSpec *pspec, gpo
     } else {
         [self updateVisibleAreaWithRect:CGRectMake(c->x, c->y, c->width, c->height)];
     }
+    self.ready = YES;
     g_clear_pointer(&monitors, g_array_unref);
     return;
     
@@ -226,10 +235,6 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
     return _device;
 }
 
-- (CGSize)displaySize {
-    return _visibleArea.size;
-}
-
 - (UIImage *)screenshot {
     CGImageRef img;
     CGColorSpaceRef colorSpaceRef = CGColorSpaceCreateDeviceRGB();
@@ -237,7 +242,7 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
     dispatch_semaphore_wait(_drawLock, DISPATCH_TIME_FOREVER); // TODO: separate read lock so we don't block texture copy
     if (_canvasData) { // may be destroyed at this point
         CGDataProviderRef dataProviderRef = CGDataProviderCreateWithData(NULL, _canvasData, _canvasStride * _canvasArea.size.height, nil);
-        img = CGImageCreate(_canvasArea.size.width, _canvasArea.size.height, 8, 32, _canvasStride, colorSpaceRef, kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst, dataProviderRef, NULL, NO, kCGRenderingIntentDefault);
+        img = CGImageCreate(_canvasArea.size.width, _canvasArea.size.height, 8, 32, _canvasStride, colorSpaceRef, kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst, dataProviderRef, NULL, NO, kCGRenderingIntentDefault);
         CGDataProviderRelease(dataProviderRef);
     } else {
         img = NULL;
@@ -259,11 +264,15 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
 @synthesize texture = _texture;
 @synthesize numVertices = _numVertices;
 @synthesize vertices = _vertices;
+@synthesize viewportOrigin;
+@synthesize viewportScale;
 
 - (id)init {
     self = [super init];
     if (self) {
         _drawLock = dispatch_semaphore_create(1);
+        self.viewportScale = 1.0f;
+        self.viewportOrigin = CGPointMake(0, 0);
     }
     return self;
 }
@@ -274,9 +283,9 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
         GList *list;
         GList *it;
         
-        _channelID = channelID;
-        _monitorID = monitorID;
-        _session = session;
+        self.channelID = channelID;
+        self.monitorID = monitorID;
+        self.session = session;
         _sigsconnected = NO;
         g_object_ref(session);
         
@@ -305,10 +314,10 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
         cs_channel_destroy(self.session, SPICE_CHANNEL(_display), (__bridge void *)self);
     }
     NSLog(@"%s:%d", __FUNCTION__, __LINE__);
-    g_signal_handlers_disconnect_by_func(_session, G_CALLBACK(cs_channel_new), GLIB_OBJC_RELEASE(self));
-    g_signal_handlers_disconnect_by_func(_session, G_CALLBACK(cs_channel_destroy), GLIB_OBJC_RELEASE(self));
-    g_object_unref(_session);
-    _session = NULL;
+    g_signal_handlers_disconnect_by_func(self.session, G_CALLBACK(cs_channel_new), GLIB_OBJC_RELEASE(self));
+    g_signal_handlers_disconnect_by_func(self.session, G_CALLBACK(cs_channel_destroy), GLIB_OBJC_RELEASE(self));
+    g_object_unref(self.session);
+    self.session = NULL;
 }
 
 - (void)updateVisibleAreaWithRect:(CGRect)rect {
@@ -320,6 +329,7 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
     } else {
         _visibleArea = visible;
     }
+    self.displaySize = _visibleArea.size;
     [self rebuildTexture];
     [self rebuildVertices];
 }
@@ -333,7 +343,9 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
     textureDescriptor.pixelFormat = (_canvasFormat == SPICE_SURFACE_FMT_32_xRGB) ? MTLPixelFormatBGRA8Unorm : MTLPixelFormatBGR5A1Unorm;
     textureDescriptor.width = _visibleArea.size.width;
     textureDescriptor.height = _visibleArea.size.height;
+    dispatch_semaphore_wait(_drawLock, DISPATCH_TIME_FOREVER);
     _texture = [_device newTextureWithDescriptor:textureDescriptor];
+    dispatch_semaphore_signal(_drawLock);
     [self drawRegion:_visibleArea];
 }
 
@@ -351,6 +363,7 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
         { {  _visibleArea.size.width/2,  -_visibleArea.size.height/2 },  { 1.f, 1.f } },
     };
     
+    dispatch_semaphore_wait(_drawLock, DISPATCH_TIME_FOREVER);
     // Create our vertex buffer, and initialize it with our quadVertices array
     _vertices = [_device newBufferWithBytes:quadVertices
                                      length:sizeof(quadVertices)
@@ -358,6 +371,7 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
 
     // Calculate the number of vertices by dividing the byte length by the size of each vertex
     _numVertices = sizeof(quadVertices) / sizeof(UTMVertex);
+    dispatch_semaphore_signal(_drawLock);
 }
 
 - (void)drawRegion:(CGRect)rect {
@@ -375,6 +389,10 @@ static void cs_channel_destroy(SpiceSession *s, SpiceChannel *channel, gpointer 
                     bytesPerRow:_canvasStride];
     }
     dispatch_semaphore_signal(_drawLock);
+}
+
+- (BOOL)visible {
+    return self.ready;
 }
 
 @end
